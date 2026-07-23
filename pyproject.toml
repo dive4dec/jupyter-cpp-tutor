@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jupyter-cpp-tutor"
+version = "0.1.0"
+description = "C++ step-by-step code visualization for JupyterLab 4.x and Notebook 7"
+readme = "README.md"
+license = "MIT"
+authors = [{name = "dive4dec"}]
+requires-python = ">=3.8"
+dependencies = [
+    "ipython>=8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/dive4dec/jupyter-cpp-tutor"
+Repository = "https://github.com/dive4dec/jupyter-cpp-tutor"
+Issues = "https://github.com/dive4dec/jupyter-cpp-tutor/issues"
+Changelog = "https://github.com/dive4dec/jupyter-cpp-tutor/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = ["pytest", "build", "twine"]
+
+[tool.setuptools]
+packages = ["jupyter_cpp_tutor"]
+
+[tool.setuptools.package-data]
+jupyter_cpp_tutor = ["*.py"]
