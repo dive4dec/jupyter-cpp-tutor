@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jupyter-cpp-tutor"
-version = "0.2.1"
+version = "0.2.2"
 description = "C++ step-by-step code visualization for JupyterLab 4.x and Notebook 7"
 readme = "README.md"
 license = "MIT"

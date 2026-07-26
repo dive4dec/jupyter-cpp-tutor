@@ -51,12 +51,17 @@ def setup_stdout_capture():
         f.write("")
     # Redirect inferior's stdout to the temp file using freopen.
     # This must be called from within GDB when the inferior is running.
+    # Cast to (FILE*) needed for GDB 17+ which can't resolve stdout's type.
     try:
-        gdb.execute('call (void) freopen("' + _stdout_path + '", "w", stdout)',
+        gdb.execute('call (void) freopen("' + _stdout_path + '", "w", (FILE*)stdout)',
                     to_string=True)
     except Exception:
-        # If freopen fails (e.g. no stdout symbol), try setvbuf + write approach
-        pass
+        # Fallback: try without cast (works on older GDB like 15.x)
+        try:
+            gdb.execute('call (void) freopen("' + _stdout_path + '", "w", stdout)',
+                        to_string=True)
+        except Exception:
+            pass
 
 def read_stdout():
     """Read the current stdout content from the capture file."""
@@ -83,10 +88,15 @@ def setup_stdin_capture():
     if not os.path.exists(_stdin_path):
         return
     try:
-        gdb.execute('call (void) freopen("' + _stdin_path + '", "r", stdin)',
+        gdb.execute('call (void) freopen("' + _stdin_path + '", "r", (FILE*)stdin)',
                     to_string=True)
     except Exception:
-        pass
+        # Fallback: try without cast (works on older GDB like 15.x)
+        try:
+            gdb.execute('call (void) freopen("' + _stdin_path + '", "r", stdin)',
+                        to_string=True)
+        except Exception:
+            pass
 
 # ── Source file tracking ──
 _user_source_file = None
