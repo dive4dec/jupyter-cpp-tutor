@@ -68,6 +68,26 @@ def read_stdout():
     except:
         return ""
 
+# ── Stdin redirect via freopen ──
+_stdin_path = "__STDIN_PATH_PLACEHOLDER__"
+
+def setup_stdin_capture():
+    """Redirect the inferior's stdin to a pre-collected input file.
+
+    Uses ``freopen`` to redirect the C ``stdin`` FILE* to the input file.
+    This must be called AFTER the inferior starts (after ``run``), when
+    we're stopped at the first breakpoint.
+    """
+    if not _stdin_path:
+        return  # no inputs provided — leave stdin as-is (will be empty)
+    if not os.path.exists(_stdin_path):
+        return
+    try:
+        gdb.execute('call (void) freopen("' + _stdin_path + '", "r", stdin)',
+                    to_string=True)
+    except Exception:
+        pass
+
 # ── Source file tracking ──
 _user_source_file = None
 
@@ -779,6 +799,8 @@ gdb.execute("run", to_string=True)
 
 # Redirect inferior stdout to a temp file (must be after run, when inferior is alive)
 setup_stdout_capture()
+# Redirect inferior stdin to pre-collected input file (if provided)
+setup_stdin_capture()
 
 # Find the user source file AFTER run (need a selected frame for info source)
 _user_source_file = get_user_source_file()
@@ -921,6 +943,7 @@ def trace_cpp(
     max_steps: int = 5000,
     compiler: str = "g++",
     extra_flags: list[str] | None = None,
+    inputs: list[str] | None = None,
 ) -> list[dict]:
     """Trace C++ code execution and return a list of trace step dicts.
 
@@ -936,6 +959,10 @@ def trace_cpp(
         C++ compiler to use (default: ``g++``).
     extra_flags : list[str] | None
         Additional compiler flags (e.g. ``["-std=c++17"]``).
+    inputs : list[str] | None
+        Pre-collected stdin lines for ``cin`` / ``getline``.  Each
+        element becomes one line in the redirected stdin file.  If
+        ``None``, stdin is empty (``cin`` immediately reaches EOF).
 
     Returns
     -------
@@ -1010,6 +1037,22 @@ def trace_cpp(
         # Write GDB script — inject source lines for brace detection
         source_lines_json = json.dumps(source_code.split('\n'))
         script_content = _GDB_SCRIPT.replace("__SOURCE_LINES_PLACEHOLDER__", source_lines_json)
+
+        # If inputs are provided, write them to a temp file and inject the
+        # path into the GDB script so it can redirect the inferior's stdin.
+        stdin_path = None
+        if inputs is not None:
+            stdin_path = os.path.join(tmpdir, "stdin.txt")
+            with open(stdin_path, "w") as f:
+                f.write("\n".join(inputs))
+            script_content = script_content.replace(
+                "__STDIN_PATH_PLACEHOLDER__", stdin_path
+            )
+        else:
+            script_content = script_content.replace(
+                "__STDIN_PATH_PLACEHOLDER__", ""
+            )
+
         with open(script_path, "w") as f:
             f.write(script_content)
 

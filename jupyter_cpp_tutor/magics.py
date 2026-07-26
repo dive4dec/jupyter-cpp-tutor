@@ -116,6 +116,10 @@ class CppTutorMagics(Magics):
                             help="C++ standard for this cell only (overrides config)")
         parser.add_argument("--flags", default=None,
                             help='Extra compiler flags for this cell only')
+        parser.add_argument("--input", action="append", default=[], metavar="VALUE",
+                            help="Pre-collected stdin input for cin/getline. "
+                                 "Repeat --input for multiple lines: "
+                                 "--input Alice --input 25")
         try:
             args, _ = parser.parse_known_args(shlex.split(line))
         except SystemExit:
@@ -138,7 +142,8 @@ class CppTutorMagics(Magics):
         compiler_flags = [f"-std={cpp_std}"] + extra_flags
 
         # Trace the code
-        steps = trace_cpp(source_code, extra_flags=compiler_flags)
+        inputs = args.input if args.input else None
+        steps = trace_cpp(source_code, extra_flags=compiler_flags, inputs=inputs)
 
         # Check for errors
         if len(steps) == 1 and steps[0].get("event") in ("error", "compile_error"):

@@ -179,17 +179,25 @@ body {{
   border-left: 3px solid #22c55e;
 }}
 .jpt-code-line.current {{
-  background: #fef3c7;
-  border-left: 3px solid #f59e0b;
+  background: #fce7f3;
+  border-left: 3px solid #e10c65;
 }}
 .jpt-code-line.current .jpt-line-code {{
   font-weight: bold;
 }}
 .jpt-code-line.current .jpt-line-num::before {{
   content: "►";
-  color: #f59e0b;
+  color: #e10c65;
   margin-right: 2px;
 }}
+/* C++ syntax highlighting */
+.jpt-tok-kw {{ color: #c678dd; font-weight: 600; }}      /* keywords: int, if, for... */
+.jpt-tok-str {{ color: #98c379; }}                       /* strings */
+.jpt-tok-num {{ color: #d19a66; }}                       /* numbers */
+.jpt-tok-com {{ color: #7c7c7c; font-style: italic; }}   /* comments */
+.jpt-tok-fn  {{ color: #61afef; }}                       /* function names */
+.jpt-tok-type {{ color: #e5c07b; }}                      /* types: int, string, vector... */
+.jpt-tok-pre {{ color: #c678dd; font-weight: 600; }}     /* preprocessor: #include, #define */
 /* Divider */
 .jpt-divider {{
   width: 4px;
@@ -415,6 +423,132 @@ function escapeHtml(s) {{
   return div.innerHTML;
 }}
 
+// ── C++ syntax highlighting ───────────────────────────────────────
+var CPP_KEYWORDS = ['return','if','else','for','while','break','continue','do','switch',
+  'case','default','goto','try','catch','throw','new','delete','class','struct','enum',
+  'union','public','private','protected','virtual','override','final','static','const',
+  'constexpr','inline','namespace','using','template','typename','auto','decltype',
+  'operator','friend','explicit','this','nullptr','true','false','sizeof','alignof',
+  'static_cast','dynamic_cast','const_cast','reinterpret_cast','co_await','co_return',
+  'co_yield','concept','requires','consteval','constinit','mutable','volatile','register',
+  'extern','thread_local'];
+var CPP_TYPES = ['int','char','bool','void','double','float','long','short','unsigned',
+  'signed','size_t','ssize_t','uint8_t','uint16_t','uint32_t','uint64_t','int8_t',
+  'int16_t','int32_t','int64_t','string','wstring','vector','map','unordered_map',
+  'set','unordered_set','list','deque','array','pair','tuple','shared_ptr','unique_ptr',
+  'weak_ptr','function','optional','variant','any','queue','stack','priority_queue',
+  'iterator','const_iterator','reverse_iterator','ostream','istream','stringstream',
+  'ostringstream','istringstream','fstream','ifstream','ofstream','mutex','lock_guard',
+  'unique_lock','thread','future','promise','atomic','chrono','time_point','duration',
+  'main','std','cout','cin','endl','cerr','clog','move','forward','make_shared',
+  'make_unique','make_pair','emplace','emplace_back','push_back','pop_back','size',
+  'begin','end','front','back','at','find','count','insert','erase','clear','reserve',
+  'resize','empty','data','substr','length','to_string','stoi','stol','stod','stof',
+  'sort','reverse','max','min','abs','swap','fill','accumulate','transform','copy',
+  'make_heap','push_heap','pop_heap','sort_heap','lower_bound','upper_bound',
+  'binary_search','unique','remove','remove_if','gcd','lcm','pow','sqrt','floor','ceil',
+  'round','log','exp','sin','cos','tan','atan2','PI','EOF','NULL','nullopt',
+  'monostate','tuple_size','tuple_element','type_info','exception','runtime_error',
+  'logic_error','out_of_range','invalid_argument','bad_alloc','FILE'];
+var kwSet = {{}}; CPP_KEYWORDS.forEach(function(k){{ kwSet[k] = 1; }});
+var typeSet = {{}}; CPP_TYPES.forEach(function(t){{ typeSet[t] = 1; }});
+
+function highlightCpp(line) {{
+  var result = '';
+  var i = 0;
+  while (i < line.length) {{
+    var ch = line[i];
+    // Preprocessor (#include, #define, #ifdef...)
+    if (ch === '#' && (i === 0 || line[i-1] === ' ' || line[i-1] === '\\t')) {{
+      var j = i;
+      while (j < line.length && line[j] !== '\\n' && line[j] !== '/') j++;
+      // Check for // comment after preprocessor
+      var slashIdx = line.indexOf('//', i);
+      if (slashIdx >= 0 && slashIdx < j) {{
+        result += '<span class="jpt-tok-pre">' + escapeHtml(line.substring(i, slashIdx)) + '</span>';
+        result += '<span class="jpt-tok-com">' + escapeHtml(line.substring(slashIdx)) + '</span>';
+        i = line.length;
+        break;
+      }}
+      result += '<span class="jpt-tok-pre">' + escapeHtml(line.substring(i, j)) + '</span>';
+      i = j;
+      continue;
+    }}
+    // Line comment //
+    if (ch === '/' && i + 1 < line.length && line[i+1] === '/') {{
+      result += '<span class="jpt-tok-com">' + escapeHtml(line.substring(i)) + '</span>';
+      break;
+    }}
+    // Block comment /* (single-line, since we highlight per-line)
+    if (ch === '/' && i + 1 < line.length && line[i+1] === '*') {{
+      var end = line.indexOf('*/', i + 2);
+      if (end < 0) end = line.length - 2;
+      result += '<span class="jpt-tok-com">' + escapeHtml(line.substring(i, end + 2)) + '</span>';
+      i = end + 2;
+      continue;
+    }}
+    // String "..."
+    if (ch === '"') {{
+      var j = i + 1;
+      while (j < line.length) {{
+        if (line[j] === '\\\\') {{ j += 2; continue; }}
+        if (line[j] === '"') {{ j++; break; }}
+        j++;
+      }}
+      result += '<span class="jpt-tok-str">' + escapeHtml(line.substring(i, j)) + '</span>';
+      i = j;
+      continue;
+    }}
+    // Char '...'
+    if (ch === "'") {{
+      var j = i + 1;
+      while (j < line.length) {{
+        if (line[j] === '\\\\') {{ j += 2; continue; }}
+        if (line[j] === "'") {{ j++; break; }}
+        j++;
+      }}
+      result += '<span class="jpt-tok-str">' + escapeHtml(line.substring(i, j)) + '</span>';
+      i = j;
+      continue;
+    }}
+    // Number
+    if (/[0-9]/.test(ch) || (ch === '.' && i+1 < line.length && /[0-9]/.test(line[i+1]))) {{
+      var j = i;
+      while (j < line.length && /[0-9._xXeE+\\-a-fA-FfFuUlL]/.test(line[j])) {{
+        if ((line[j] === '+' || line[j] === '-') && !/[eE]/.test(line[j-1])) break;
+        j++;
+      }}
+      result += '<span class="jpt-tok-num">' + escapeHtml(line.substring(i, j)) + '</span>';
+      i = j;
+      continue;
+    }}
+    // Identifier / keyword / type / function
+    if (/[a-zA-Z_]/.test(ch)) {{
+      var j = i;
+      // Handle qualified names: std::cout, std::vector, etc.
+      while (j < line.length && /[a-zA-Z0-9_:]/.test(line[j])) j++;
+      var word = line.substring(i, j);
+      var firstWord = word.split('::')[0];
+      var afterWord = line.substring(j).trim();
+      if (kwSet[firstWord]) {{
+        result += '<span class="jpt-tok-kw">' + escapeHtml(word) + '</span>';
+      }} else if (typeSet[firstWord] || typeSet[word]) {{
+        result += '<span class="jpt-tok-type">' + escapeHtml(word) + '</span>';
+      }} else if (afterWord.charAt(0) === '(') {{
+        result += '<span class="jpt-tok-fn">' + escapeHtml(word) + '</span>';
+      }} else {{
+        result += escapeHtml(word);
+      }}
+      i = j;
+      continue;
+    }}
+    // Default
+    result += escapeHtml(ch);
+    i++;
+  }}
+  return result;
+}}
+
 function renderVarVal(val) {{
   if (!val || typeof val !== 'object') return '<span class="jpt-var-value">' + escapeHtml(val) + '</span>';
   var kind = val.kind;
@@ -537,7 +671,7 @@ function renderStep() {{
     if (lineNum === curLine) cls += ' current';
     codeHtml += '<div class="' + cls + '">';
     codeHtml += '<span class="jpt-line-num">' + lineNum + '</span>';
-    codeHtml += '<span class="jpt-line-code">' + escapeHtml(sourceLines[i] || '') + '</span>';
+    codeHtml += '<span class="jpt-line-code">' + (sourceLines[i] ? highlightCpp(sourceLines[i]) : '') + '</span>';
     codeHtml += '</div>';
   }}
   document.getElementById('code-section').innerHTML = codeHtml;
