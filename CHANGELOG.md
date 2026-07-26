@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-07-26
+
+### Added
+- C++ syntax highlighting in code panel: keywords (purple), types (yellow), strings (green), comments (gray italic), numbers (orange), function calls (blue), preprocessor directives (purple)
+
+### Changed
+- Current line color changed from yellow (`#fef3c7` / `#f59e0b`) to pink (`#fce7f3` / `#e10c65`) for consistency with jupyter-python-tutor
+
 ## [0.2.0] - 2026-07-26
 
 ### Added
@@ -12,12 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cin` / `getline` stdin support: pre-collected inputs written to a temp file, `freopen` redirects the inferior's `stdin` to that file after `run`
 - `inputs` parameter on `trace_cpp()`: `inputs: list[str] | None`
 - `setup_stdin_capture()` function in GDB script: redirects inferior stdin via `freopen(path, "r", stdin)`
-- C++ syntax highlighting in code panel: keywords (purple), types (yellow), strings (green), comments (gray italic), numbers (orange), function calls (blue), preprocessor directives (purple)
 
 ### Changed
 - GDB script accepts `__STDIN_PATH_PLACEHOLDER__` injection for stdin file path
 - `trace_cpp()` signature updated with `inputs` parameter
-- Current line color changed from yellow (`#fef3c7` / `#f59e0b`) to pink (`#fce7f3` / `#e10c65`) for consistency with jupyter-python-tutor
 
 ## [0.1.0] - 2026-07-23
 
