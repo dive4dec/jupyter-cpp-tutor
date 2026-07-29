@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-07-30
+
+### Fixed
+- stdout output not visible until `std::endl` or `std::flush`: `std::cout` buffers internally and only writes to the C `stdout` FILE* on flush. Added `setvbuf(stdout, 0, _IONBF, 0)` after `freopen` to set stdout to unbuffered mode, so `std::cout` output (synced with C stdio by default) appears in the capture file immediately — even without `std::endl`.
+
+### Changed
+- C++ syntax highlighting colors switched from One Dark theme (too light against `#fafafa` background) to One Light theme: keywords `#a626a4`, strings `#50a14f`, numbers `#986801`, comments `#a0a1a7`, functions `#4078f2`, types `#c18401`, preprocessor `#a626a4`.
+
 ## [0.2.2] - 2026-07-26
 
 ### Fixed

@@ -62,6 +62,18 @@ def setup_stdout_capture():
                         to_string=True)
         except Exception:
             pass
+    # Disable buffering on stdout so std::cout output appears immediately
+    # in the capture file, even without std::endl / std::flush.
+    # _IONBF = 2 (unbuffered).  With sync_with_stdio(true) (the default),
+    # std::cout writes go through stdio, so unbuffering stdout makes them
+    # reach the file right away.
+    try:
+        gdb.execute('call (int) setvbuf((FILE*)stdout, 0, 2, 0)', to_string=True)
+    except Exception:
+        try:
+            gdb.execute('call (int) setvbuf(stdout, 0, 2, 0)', to_string=True)
+        except Exception:
+            pass
 
 def read_stdout():
     """Read the current stdout content from the capture file."""

@@ -190,14 +190,14 @@ body {{
   color: #e10c65;
   margin-right: 2px;
 }}
-/* C++ syntax highlighting */
-.jpt-tok-kw {{ color: #c678dd; font-weight: 600; }}      /* keywords: int, if, for... */
-.jpt-tok-str {{ color: #98c379; }}                       /* strings */
-.jpt-tok-num {{ color: #d19a66; }}                       /* numbers */
-.jpt-tok-com {{ color: #7c7c7c; font-style: italic; }}   /* comments */
-.jpt-tok-fn  {{ color: #61afef; }}                       /* function names */
-.jpt-tok-type {{ color: #e5c07b; }}                      /* types: int, string, vector... */
-.jpt-tok-pre {{ color: #c678dd; font-weight: 600; }}     /* preprocessor: #include, #define */
+/* C++ syntax highlighting — light-theme colors for light background */
+.jpt-tok-kw {{ color: #a626a4; font-weight: 600; }}      /* keywords: int, if, for... */
+.jpt-tok-str {{ color: #50a14f; }}                       /* strings */
+.jpt-tok-num {{ color: #986801; }}                       /* numbers */
+.jpt-tok-com {{ color: #a0a1a7; font-style: italic; }}   /* comments */
+.jpt-tok-fn  {{ color: #4078f2; }}                       /* function names */
+.jpt-tok-type {{ color: #c18401; }}                      /* types: int, string, vector... */
+.jpt-tok-pre {{ color: #a626a4; font-weight: 600; }}     /* preprocessor: #include, #define */
 /* Divider */
 .jpt-divider {{
   width: 4px;
