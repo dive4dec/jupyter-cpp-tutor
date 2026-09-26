@@ -11,9 +11,10 @@ step-by-step visualization (like [Python Tutor](https://pythontutor.com/) /
 - **%%cpptutor cell magic** — write C++ code in a Python kernel cell, get instant visualization
 - **GDB-based tracing** — compiles with `g++ -g`, traces with GDB's Python API
 - **Step-by-step navigation** — slider + first/prev/next/last buttons
-- **Variable visualization** — int, char, bool, float, pointers, arrays, structs
+- **Variable visualization** — int, char, bool, float, pointers, arrays, structs, and C++ references (shown with their reference type + a `(&)` alias marker, including C++23 references to arrays of unknown bound)
 - **Call stack** — see function frames with parameters and locals
 - **Pointer arrows** — SVG arrows from pointers to their targets
+- **Program output** — stdout panel plus a terminal-style stderr panel (compiler warnings + `std::cerr`), hidden when empty
 - **Resizable panels** — draggable dividers between code/frames/heap columns
 - **Iframe srcdoc** — works in trusted JupyterLab 4 / Notebook 7 notebooks
 

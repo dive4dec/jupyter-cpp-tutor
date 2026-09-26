@@ -226,3 +226,38 @@ class TestRenderTrace:
         html = render_trace(steps, source_code="int x = ;")
         # Should still render, showing the error
         assert "iframe" in html
+
+    def test_stderr_panel_present(self):
+        """The stderr panel (label + body) is present in the rendered HTML."""
+        steps = [{"line": 1, "event": "line", "stdout": "", "stderr": "", "call_stack": []}]
+        html = render_trace(steps, source_code="int x = 1;")
+        assert "jpt-stderr" in html
+        # srcdoc escapes quotes: id=&quot;stderr&quot;
+        assert "id=&quot;stderr&quot;" in html
+        assert "stderr-label" in html
+
+    def test_stderr_content_in_steps_json(self):
+        """Non-empty stderr on a step is carried into the embedded steps JSON."""
+        steps = [{"line": 1, "event": "line", "stdout": "out",
+                  "stderr": "some warning here", "call_stack": []}]
+        html = render_trace(steps, source_code="int x = 1;")
+        assert "some warning here" in html
+
+    def test_reference_var_rendered(self):
+        """A reference variable (ref=True, ref_type) renders its reference
+        type and the (&) alias marker."""
+        steps = [{
+            "line": 2, "event": "line", "stdout": "", "stderr": "",
+            "call_stack": [{
+                "func": "main()", "line": 2,
+                "simple_vars": {"r": {"kind": "string", "type": "string",
+                                       "value": '"hi"', "ref": True,
+                                       "ref_type": "std::string &"}},
+                "pointer_vars": {}, "struct_vars": {},
+            }],
+        }]
+        html = render_trace(steps, source_code="std::string &r = msg;")
+        # ref_type is embedded in the steps JSON
+        assert "std::string &" in html
+        # The (&) alias marker class is defined and used
+        assert "jpt-var-ref" in html

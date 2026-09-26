@@ -108,7 +108,12 @@ class CppTutorMagics(Magics):
 
     @cell_magic("cpptutor")
     def cpptutor(self, line: str, cell: str):
-        """Trace C++ code and display step-by-step visualization."""
+        """Trace C++ code and display step-by-step visualization.
+
+        The visualization includes a stdout panel and (when the program
+        or compiler produces stderr output, e.g. ``std::cerr`` or
+        compiler warnings) a red stderr panel, mirroring a terminal.
+        """
         parser = argparse.ArgumentParser(prog="%%cpptutor", add_help=False)
         parser.add_argument("--height", type=int, default=None,
                             help="Height of visualization in pixels")

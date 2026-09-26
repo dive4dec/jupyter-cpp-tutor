@@ -85,6 +85,49 @@ def read_stdout():
     except:
         return ""
 
+# ── Stderr capture via output redirection ──
+# Mirrors the stdout capture so program stderr (e.g. std::cerr) is
+# captured per step and can be displayed like a terminal would.
+_stderr_path = None
+
+def setup_stderr_capture():
+    """Redirect the inferior's stderr to a temp file so we can read it.
+
+    Must be called AFTER the inferior starts (after ``run``).
+    """
+    global _stderr_path
+    _stderr_path = "/tmp/__jpt_stderr_" + str(os.getpid()) + ".txt"
+    with open(_stderr_path, "w") as f:
+        f.write("")
+    try:
+        gdb.execute('call (void) freopen("' + _stderr_path + '", "w", (FILE*)stderr)',
+                    to_string=True)
+    except Exception:
+        try:
+            gdb.execute('call (void) freopen("' + _stderr_path + '", "w", stderr)',
+                        to_string=True)
+        except Exception:
+            pass
+    # stderr is block-buffered when redirected to a file — unbuffer it so
+    # std::cerr output appears in the capture file immediately.
+    try:
+        gdb.execute('call (int) setvbuf((FILE*)stderr, 0, 2, 0)', to_string=True)
+    except Exception:
+        try:
+            gdb.execute('call (int) setvbuf(stderr, 0, 2, 0)', to_string=True)
+        except Exception:
+            pass
+
+def read_stderr():
+    """Read the current stderr content from the capture file."""
+    if not _stderr_path or not os.path.exists(_stderr_path):
+        return ""
+    try:
+        with open(_stderr_path, "r") as f:
+            return f.read()
+    except:
+        return ""
+
 # ── Stdin redirect via freopen ──
 _stdin_path = "__STDIN_PATH_PLACEHOLDER__"
 
@@ -217,11 +260,45 @@ def is_array(val):
     except:
         return False
 
+def is_reference(val):
+    try:
+        return val.type.code == gdb.TYPE_CODE_REF
+    except:
+        return False
+
 def is_struct(val):
     try:
         return val.type.code in (gdb.TYPE_CODE_STRUCT, gdb.TYPE_CODE_UNION)
     except:
         return False
+
+def format_reference(val):
+    """Format a reference variable (TYPE_CODE_REF).
+
+    A reference is an alias for its referenced object.  We format the
+    referenced value and annotate it with the reference marker.  For
+    C++23 references to arrays of unknown bound (e.g. ``double (&)[0]``),
+    the referenced value's ``range()`` is unavailable, so ``format_array``
+    falls back to zero size — the alias nature is what matters for the
+    student to see.
+    """
+    try:
+        referenced = val.referenced_value()
+        formatted = format_value(referenced)
+        if isinstance(formatted, dict):
+            formatted = dict(formatted)
+            formatted["ref"] = True
+            formatted["ref_type"] = get_type_name(val)
+            formatted["ref_addr"] = str(val.address) if val.address else "0x0"
+        return formatted
+    except Exception:
+        # Fall back to displaying the reference as a pointer-like alias
+        try:
+            addr = str(val.address) if val.address else "0x0"
+        except Exception:
+            addr = "0x0"
+        return {"kind": "reference", "type": get_type_name(val),
+                "value": None, "addr": addr, "deref_value": None}
 
 def format_pointer(val):
     try:
@@ -244,7 +321,12 @@ def format_pointer(val):
 def format_array(val):
     try:
         t = val.type
-        n = t.range()[1] - t.range()[0] + 1 if hasattr(t, 'range') else 0
+        try:
+            n = t.range()[1] - t.range()[0] + 1
+        except Exception:
+            # C++23 arrays of unknown bound (e.g. double [0] behind a
+            # reference) have no computable range — fall back to 0.
+            n = 0
         n = min(n, 20)
         elements = []
         for i in range(n):
@@ -326,7 +408,9 @@ def format_value(val):
     if val is None:
         return {"kind": "simple", "type": "void", "value": "void"}
     try:
-        if is_pointer(val):
+        if is_reference(val):
+            return format_reference(val)
+        elif is_pointer(val):
             return format_pointer(val)
         elif is_array(val):
             return format_array(val)
@@ -617,6 +701,7 @@ def capture_step():
             "call_stack": call_stack,  # now includes vars for ALL frames
             "heap_objects": heap_objects,
             "stdout": stdout_text,
+            "stderr": read_stderr(),
         }
         steps.append(step)
         step_idx[0] += 1
@@ -747,6 +832,7 @@ def _capture_function_entry(entry_line, func_name):
             "call_stack": [],
             "heap_objects": heap_objects,
             "stdout": stdout_text,
+            "stderr": read_stderr(),
         }
         for i, f in enumerate(call_stack):
             if i == 0:
@@ -821,6 +907,8 @@ gdb.execute("run", to_string=True)
 
 # Redirect inferior stdout to a temp file (must be after run, when inferior is alive)
 setup_stdout_capture()
+# Redirect inferior stderr to a temp file (captured per step like stdout)
+setup_stderr_capture()
 # Redirect inferior stdin to pre-collected input file (if provided)
 setup_stdin_capture()
 
@@ -1056,6 +1144,11 @@ def trace_cpp(
             error_msg = '\n'.join(error_lines) if error_lines else stderr
             return [{"line": 0, "event": "compile_error", "call_stack": [], "stdout": error_msg}]
 
+        # Warnings emitted during a *successful* compile are kept and
+        # attached to every trace step's stderr so the visualization
+        # displays them like a terminal would (terminal-like stderr panel).
+        compile_warnings = result.stderr.strip()
+
         # Write GDB script — inject source lines for brace detection
         source_lines_json = json.dumps(source_code.split('\n'))
         script_content = _GDB_SCRIPT.replace("__SOURCE_LINES_PLACEHOLDER__", source_lines_json)
@@ -1122,5 +1215,14 @@ def trace_cpp(
         user_source_lines = source_code.split('\n')
         for step in steps:
             step["source_lines"] = user_source_lines
+            # Prepend compiler warnings (if any) to the step's stderr so
+            # they appear in the stderr panel on every step, matching
+            # terminal order (compile output before runtime output).
+            if compile_warnings:
+                runtime_err = step.get("stderr", "").rstrip("\n")
+                if runtime_err:
+                    step["stderr"] = compile_warnings + "\n" + runtime_err + "\n"
+                else:
+                    step["stderr"] = compile_warnings + "\n"
 
         return steps

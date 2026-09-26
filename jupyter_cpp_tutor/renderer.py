@@ -47,6 +47,7 @@ def _generate_inner_html(steps: list[dict], source_code: str, height: int = 500)
         clean_step = {
             "line": step.get("line", 0),
             "stdout": step.get("stdout", ""),
+            "stderr": step.get("stderr", ""),
             "call_stack": [],
             "heap_objects": step.get("heap_objects", []),
             "event": step.get("event", ""),
@@ -139,6 +140,29 @@ body {{
   overflow-y: auto;
   flex-shrink: 0;
 }}
+/* Stderr output (terminal-style: shown below stdout when non-empty) */
+.jpt-stderr-label {{
+  padding: 2px 10px;
+  background: #fee2e2;
+  border-bottom: 1px solid #d4d4d4;
+  font-family: 'DejaVu Sans Mono', 'Consolas', monospace;
+  font-size: 10px;
+  font-weight: bold;
+  color: #991b1b;
+  flex-shrink: 0;
+}}
+.jpt-stderr {{
+  padding: 4px 10px;
+  background: #fef2f2;
+  border-bottom: 1px solid #d4d4d4;
+  font-family: 'DejaVu Sans Mono', 'Consolas', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}}
+.jpt-stderr-hidden {{ display: none; }}
 /* Main content area */
 .jpt-content {{
   display: flex;
@@ -263,6 +287,11 @@ body {{
 .jpt-var-value {{
   color: #166534;
 }}
+.jpt-var-ref {{
+  color: #7c3aed;
+  font-size: 10px;
+  font-style: italic;
+}}
 .jpt-var-arrow {{
   color: #dc2626;
   cursor: pointer;
@@ -377,6 +406,8 @@ body {{
   </div>
   <div class="jpt-output-label">Program output (stdout)</div>
   <div class="jpt-output" id="output"></div>
+  <div class="jpt-stderr-label jpt-stderr-hidden" id="stderr-label">Program output (stderr)</div>
+  <div class="jpt-stderr jpt-stderr-hidden" id="stderr"></div>
   <div class="jpt-content" id="content">
     <div class="jpt-code-section" id="code-section"></div>
     <div class="jpt-divider" id="divider1"></div>
@@ -552,16 +583,48 @@ function highlightCpp(line) {{
 function renderVarVal(val) {{
   if (!val || typeof val !== 'object') return '<span class="jpt-var-value">' + escapeHtml(val) + '</span>';
   var kind = val.kind;
+  // Reference type to display: for references we show the *reference*
+  // type (e.g. "std::string &", "double (&)[0]") so students see that
+  // the variable is an alias, not a copy.
+  var refType = val.ref ? (val.ref_type || val.type) : null;
   if (kind === 'simple' || kind === 'string') {{
-    return '<span class="jpt-var-type">' + escapeHtml(val.type || '') + '</span> ' +
-           '<span class="jpt-var-value">' + escapeHtml(val.value) + '</span>';
+    var shown = (refType ? refType : (val.type || ''));
+    var suffix = refType ? ' <span class="jpt-var-ref">(&amp;)</span>' : '';
+    return '<span class="jpt-var-type">' + escapeHtml(shown) + '</span> ' +
+           '<span class="jpt-var-value">' + escapeHtml(val.value) + '</span>' + suffix;
+  }}
+  if (kind === 'array' || kind === 'container') {{
+    var typeShown = (refType ? refType : (val.type || ''));
+    var refSuffix = refType ? ' <span class="jpt-var-ref">(&amp;)</span>' : '';
+    if (kind === 'array') {{
+      var htmlA = '<span class="jpt-var-type">' + escapeHtml(typeShown) + '</span> ' + refSuffix;
+      htmlA += '<div class="jpt-array">';
+      for (var ia = 0; ia < (val.elements || []).length; ia++) {{
+        var elemA = val.elements[ia];
+        htmlA += '<div class="jpt-array-elem"><span class="jpt-elem-val">' + escapeHtml((elemA && elemA.value) || '') + '</span></div>';
+      }}
+      htmlA += '</div>';
+      return htmlA;
+    }}
+    var htmlC = '<div class="jpt-struct">';
+    htmlC += '<div class="jpt-struct-header">' + escapeHtml(typeShown) + refSuffix + ' (size=' + (val.size || 0) + ')</div>';
+    for (var ic = 0; ic < (val.elements || []).length; ic++) {{
+      var elemC = val.elements[ic];
+      htmlC += '<div class="jpt-struct-field">';
+      htmlC += '<span class="jpt-var-name">[' + ic + ']</span>';
+      htmlC += renderVarVal(elemC);
+      htmlC += '</div>';
+    }}
+    htmlC += '</div>';
+    return htmlC;
   }}
   if (kind === 'pointer') {{
     var html = '<span class="jpt-pointer">';
     if (val.value === '?') {{
       // Uninitialized pointer
-      html += '<span class="jpt-var-type">' + escapeHtml(val.type || '') + '</span> ';
-      html += '<span class="jpt-var-value">?</span>';
+      html += '<span class="jpt-var-type">' + escapeHtml(refType || val.type || '') + '</span> ' +
+              (refType ? '<span class="jpt-var-ref">(&amp;)</span> ' : '') +
+              '<span class="jpt-var-value">?</span>';
       html += '</span>';
       return html;
     }}
@@ -570,39 +633,22 @@ function renderVarVal(val) {{
       html += ' <span class="jpt-var-arrow" data-addr="' + escapeHtml(val.addr) + '">➜</span>';
     }}
     html += '</span>';
-    return html;
-  }}
-  if (kind === 'array') {{
-    var html = '<span class="jpt-var-type">' + escapeHtml(val.type || '') + '</span> ';
-    html += '<div class="jpt-array">';
-    for (var i = 0; i < (val.elements || []).length; i++) {{
-      var elem = val.elements[i];
-      html += '<div class="jpt-array-elem"><span class="jpt-elem-val">' + escapeHtml(elem.value || '') + '</span></div>';
+    if (refType) {{
+      html = '<span class="jpt-var-type">' + escapeHtml(refType) + '</span> ' +
+             '<span class="jpt-var-ref">(&amp;)</span> ' + html;
     }}
-    html += '</div>';
     return html;
   }}
   if (kind === 'struct') {{
+    var typeShownS = (refType ? refType : (val.type || 'struct'));
+    var refSuffixS = refType ? ' <span class="jpt-var-ref">(&amp;)</span>' : '';
     var html = '<div class="jpt-struct">';
-    html += '<div class="jpt-struct-header">' + escapeHtml(val.type || 'struct') + '</div>';
+    html += '<div class="jpt-struct-header">' + escapeHtml(typeShownS) + refSuffixS + '</div>';
     for (var i = 0; i < (val.fields || []).length; i++) {{
       var field = val.fields[i];
       html += '<div class="jpt-struct-field">';
       html += '<span class="jpt-var-name">' + escapeHtml(field.name) + '</span>';
       html += renderVarVal(field.value);
-      html += '</div>';
-    }}
-    html += '</div>';
-    return html;
-  }}
-  if (kind === 'container') {{
-    var html = '<div class="jpt-struct">';
-    html += '<div class="jpt-struct-header">' + escapeHtml(val.type || 'container') + ' (size=' + (val.size || 0) + ')</div>';
-    for (var i = 0; i < (val.elements || []).length; i++) {{
-      var elem = val.elements[i];
-      html += '<div class="jpt-struct-field">';
-      html += '<span class="jpt-var-name">[' + i + ']</span>';
-      html += renderVarVal(elem);
       html += '</div>';
     }}
     html += '</div>';
@@ -656,6 +702,18 @@ function renderStep() {{
   var step = steps[currentStep];
   // Output
   document.getElementById('output').textContent = step.stdout || '';
+  // Stderr (terminal-style: hidden when empty)
+  var errText = step.stderr || '';
+  var errEl = document.getElementById('stderr');
+  var errLabel = document.getElementById('stderr-label');
+  errEl.textContent = errText;
+  if (errText) {{
+    errEl.classList.remove('jpt-stderr-hidden');
+    errLabel.classList.remove('jpt-stderr-hidden');
+  }} else {{
+    errEl.classList.add('jpt-stderr-hidden');
+    errLabel.classList.add('jpt-stderr-hidden');
+  }}
   // Code
   var codeHtml = '';
   var curLine = step.line || 0;

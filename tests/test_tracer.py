@@ -309,3 +309,77 @@ int main() {
         # Should have multiple frames at deepest recursion level
         max_depth = max(len(s["call_stack"]) for s in steps)
         assert max_depth >= 3, f"Should have at least 3 frames at deepest point, got {max_depth}"
+
+    def test_std_string_reference(self):
+        """A std::string& reference is visualized as a reference (alias),
+        not a plain copy: it carries ref=True and ref_type 'std::string &'."""
+        code = ("#include <string>\n"
+                "int main() {\n"
+                "    std::string msg = \"hi\";\n"
+                "    std::string &r = msg;\n"
+                "    return 0;\n"
+                "}")
+        steps = trace_cpp(code)
+        found = False
+        for s in steps:
+            sv = s["call_stack"][0].get("simple_vars", {})
+            r = sv.get("r")
+            if r and r.get("ref"):
+                assert r.get("ref_type") == "std::string &", r
+                assert r.get("value") == '"hi"', r
+                found = True
+                break
+        assert found, "Should have a step where r is a visualized reference"
+
+    def test_unknown_bound_array_reference(self):
+        """C++23: a reference to an array of unknown bound (double (&)[0])
+        initialized from a known-bound array.  The reference must be shown
+        with its actual type (not 'unknown'), and value look-through
+        (u[1]) must work."""
+        code = ("#include <iostream>\n"
+                "int main() {\n"
+                "    double arr[3] = {1.0, 2.0, 3.0};\n"
+                "    double (&u)[0] = (double(&)[0])arr;\n"
+                "    double x = u[1];\n"
+                "    std::cout << x << std::endl;\n"
+                "    return 0;\n"
+                "}")
+        steps = trace_cpp(code)
+        # x must be correctly computed from the unknown-bound reference
+        last = steps[-1]
+        sv = last["call_stack"][0].get("simple_vars", {})
+        assert sv.get("x", {}).get("value") == "2.0", sv.get("x")
+        # u must never be shown with type 'unknown'
+        for s in steps:
+            for grp in ("simple_vars", "pointer_vars", "struct_vars"):
+                u = s["call_stack"][0].get(grp, {}).get("u")
+                if u is None:
+                    continue
+                assert u.get("type") != "unknown", (s["line"], grp, u)
+
+    def test_stderr_capture(self):
+        """std::cerr output is captured into the step's stderr field."""
+        code = ("#include <iostream>\n"
+                "int main() {\n"
+                "    std::cerr << \"boom\" << std::endl;\n"
+                "    return 0;\n"
+                "}")
+        steps = trace_cpp(code)
+        all_err = "".join(s.get("stderr", "") for s in steps)
+        assert "boom" in all_err, all_err
+
+    def test_compile_warning_in_stderr(self):
+        """Compiler warnings from a successful build are attached to every
+        step's stderr (so the visualization can display them)."""
+        code = "int main() {\n    int unused = 5;\n    return 0;\n}"
+        steps = trace_cpp(code, extra_flags=["-std=c++23", "-Wall"])
+        assert len(steps) > 1
+        for s in steps:
+            assert "warning" in s.get("stderr", ""), s.get("stderr")
+
+    def test_steps_have_stderr_field(self):
+        """Every trace step carries a stderr field (may be empty)."""
+        code = "int main() {\n    int x = 1;\n    return 0;\n}"
+        steps = trace_cpp(code)
+        for step in steps:
+            assert "stderr" in step

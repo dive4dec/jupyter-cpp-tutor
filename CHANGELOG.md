@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-27
+
+### Fixed
+- **C++23 references to arrays of unknown bound** (e.g. `double (&u)[0]` initialized from a `double[3]`) now display with their actual type (`double (&)[0]`) instead of `unknown ?`. Root cause: GDB reports references as `TYPE_CODE_REF`, which had no handling in the value formatter — it fell through to the simple-value path where the float conversion failed and the value was force-blanked to `?`. Added `is_reference()` / `format_reference()` (uses GDB's `referenced_value()`), and made `format_array` tolerate arrays whose `range()` is unavailable.
+- **References in general** (`std::string &`, etc.) now render with their reference type and a `(&)` alias marker so students can distinguish an alias from a copy.
+- **Warnings were silently dropped**: a successful compile's stderr was discarded, so compiler warnings (e.g. clang's `[-Wdangling]`, GCC's `[-Wunused-variable]` with `-Wall`) never appeared. They are now attached to every trace step's stderr and displayed in the stderr panel.
+
+### Added
+- **stderr panel (terminal-style)**: the inferior's `stderr` (e.g. `std::cerr`) is captured per step via `freopen` + unbuffered `setvbuf` (mirroring the existing stdout capture) and shown in a red panel below the green stdout panel — hidden when empty, just like a terminal.
+
 ## [0.2.3] - 2026-07-30
 
 ### Fixed
