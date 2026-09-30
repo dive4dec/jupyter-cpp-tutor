@@ -886,13 +886,31 @@ try:
             if in_user_file:
                 # Lines like: "int add(int, int);" or "8:\tint main();"
                 # Also: "void Square::Square(int);" or "int Square::area();"
-                m = re.match(r"^\s*(?:\d+:\s*)?(?:[\w\s\*\&:]+)\s+((?:\w+::)*\w+)\s*\(", line)
+                # C++20/23: a function with an `auto` parameter (or an
+                # explicit template) is a FUNCTION TEMPLATE — GDB lists it with
+                # its template-argument suffix, e.g. "void increment<int>(int&)"
+                # or "int Square::twice<int>(int)".  The name is therefore
+                # "increment<int>" / "Square::twice<int>"; the capture group
+                # must allow an optional <...> suffix or the regex misses it.
+                m = re.match(r"^\s*(?:\d+:\s*)?(?:[\w\s\*&:]+)\s+((?:\w+::)*\w+(?:\s*<[^<>]*>)?)\s*\(", line)
                 if m:
                     fname = m.group(1)
-                    if fname != "main":
-                        user_funcs.append(fname)
+                    # Strip the template-argument suffix: "increment<int>" ->
+                    # "increment".  GDB's `break <name>` matches a template by
+                    # its base name and stops at every instantiation.
+                    base_name = re.sub(r"\s*<[^<>]*>$", "", fname)
+                    # Strip a member-function qualifier: "Square::area" -> "area".
+                    if "::" in base_name:
+                        base_name = base_name.split("::")[-1]
+                    if base_name != "main":
+                        user_funcs.append(base_name)
 
+        # Dedup: the same base name can appear for several instantiations.
+        seen_funcs = set()
         for fname in user_funcs:
+            if fname in seen_funcs:
+                continue
+            seen_funcs.add(fname)
             try:
                 gdb.execute("break {}".format(fname), to_string=True)
             except:

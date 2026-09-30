@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-09-27
+
+### Fixed
+- **Stepping no longer skips into function templates.** C++20 `auto` parameter
+  functions (e.g. `void increment(auto &x)`) and explicit templates are
+  *function templates* — GDB lists them with a template-argument suffix
+  (`increment<int>`, `Square::twice<int>`). The breakpoint-discovery regex did
+  not match that suffix, so no breakpoint was set on the callee and stepping
+  went straight over the call instead of entering it. The name parser now
+  accepts the optional `<...>` suffix, strips it (and any `Class::` qualifier)
+  to the base name, and sets one breakpoint per base name so every
+  instantiation is entered. Verified for plain functions, member functions,
+  member function templates, and multi-argument templates.
+- Added regression tests: `test_template_function_step_into`,
+  `test_member_template_step_into`.
+
 ## [0.3.0] - 2026-09-27
 
 ### Fixed

@@ -173,6 +173,50 @@ class TestTraceCpp:
         has_add_close = any(s["line"] == 3 for s in steps)
         assert has_add_close, "Should have a step at line 3 (closing brace of add)"
 
+    def test_template_function_step_into(self):
+        """C++20 auto-parameter functions are function templates.
+
+        GDB lists them with a template-argument suffix (``increment<int>``).
+        The tracer must still set a breakpoint on the callee so stepping
+        ENTERS the function instead of skipping over it.
+        """
+        code = ("void increment(auto &x) {\n"
+                "    x += 1;\n"
+                "    x += 2;\n"
+                "}\n"
+                "int main() {\n"
+                "    auto x = 3;\n"
+                "    increment(x);\n"
+                "    return 0;\n"
+                "}")
+        steps = trace_cpp(code)
+        # There must be steps whose top frame is the template instantiation.
+        entered = [s for s in steps
+                   if s["call_stack"] and "increment" in s["call_stack"][0]["func"]]
+        assert entered, "Must step INTO the auto-parameter (template) function"
+        # The call stack inside the callee must be 2 frames deep (increment + main).
+        assert any(len(s["call_stack"]) >= 2 for s in entered), \
+            "Inside increment() the stack should be 2 frames deep"
+        # Both body lines (x += 1 and x += 2) must be visited.
+        entered_lines = {s["line"] for s in entered}
+        assert 2 in entered_lines, "Should execute first body line of increment()"
+        assert 3 in entered_lines, "Should execute second body line of increment()"
+
+    def test_member_template_step_into(self):
+        """Member function templates (e.g. Square::twice<int>) are entered."""
+        code = ("struct Square {\n"
+                "    template<typename T> T twice(T t) { return 2 * t; }\n"
+                "};\n"
+                "int main() {\n"
+                "    Square s;\n"
+                "    double d = s.twice(3.0);\n"
+                "    return 0;\n"
+                "}")
+        steps = trace_cpp(code)
+        entered = [s for s in steps
+                   if s["call_stack"] and "twice" in s["call_stack"][0]["func"]]
+        assert entered, "Must step INTO the member function template twice<T>"
+
     def test_pointer(self):
         code = "int main() {\n    int x = 42;\n    int *p = &x;\n    return 0;\n}"
         steps = trace_cpp(code)

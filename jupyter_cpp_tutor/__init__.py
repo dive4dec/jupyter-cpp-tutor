@@ -19,7 +19,7 @@ Requirements:
 from .tracer import trace_cpp
 from .renderer import render_trace
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __all__ = ["trace_cpp", "render_trace", "__version__"]
 
