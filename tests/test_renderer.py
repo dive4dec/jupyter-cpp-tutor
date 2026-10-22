@@ -261,3 +261,59 @@ class TestRenderTrace:
         assert "std::string &" in html
         # The (&) alias marker class is defined and used
         assert "jpt-var-ref" in html
+
+
+class TestScrollMode:
+    """The optional scrolling feature: a navbar toggle + a `scroll` render flag
+    switch the window between a fixed height (inner column scroll) and a
+    fit-all height that grows to show all content (no inner scrollbars)."""
+
+    STEPS = [{"line": 1, "event": "line", "stdout": "", "call_stack": [], "heap_objects": []}]
+    SRC = "int x = 1;"
+
+    def _inner(self, scroll=True):
+        return _generate_inner_html(self.STEPS, self.SRC, 500, scroll=scroll)
+
+    def test_toggle_button_present(self):
+        html = render_trace(self.STEPS, source_code=self.SRC)
+        assert "btn-scroll-mode" in html
+
+    def test_scroll_mode_default_widget_class(self):
+        h = self._inner(scroll=True)
+        assert 'class="jpt-widget"' in h
+        assert "jpt-widget no-scroll" not in h
+        assert "var scrollMode = true;" in h
+
+    def test_no_scroll_widget_class(self):
+        h = self._inner(scroll=False)
+        assert 'class="jpt-widget no-scroll"' in h
+        assert "var scrollMode = false;" in h
+
+    def test_no_scroll_css_rules_present(self):
+        h = self._inner(scroll=False)
+        assert ".jpt-widget.no-scroll" in h
+        assert "height: auto !important" in h      # overrides the inline fixed height
+        # columns stop scrolling internally
+        assert ".jpt-widget.no-scroll .jpt-code-section" in h
+        assert "overflow: visible" in h
+
+    def test_toggle_js_wired(self):
+        h = self._inner(scroll=False)
+        # the click handler flips scrollMode and re-applies the class
+        assert "scrollBtn.onclick" in h
+        assert "applyScrollMode" in h
+        # applyScrollMode toggles the class off/on based on scrollMode
+        assert "classList.toggle('no-scroll', !scrollMode)" in h
+
+    def test_render_trace_scroll_false_carries_class_into_srcdoc(self):
+        html = render_trace(self.STEPS, source_code=self.SRC, scroll=False)
+        # inner html is escaped for the srcdoc attribute; the class survives
+        assert "jpt-widget no-scroll" in html
+
+    def test_render_trace_default_is_scroll(self):
+        html = render_trace(self.STEPS, source_code=self.SRC)
+        assert "jpt-widget no-scroll" not in html
+
+    def test_render_trace_height_still_applied_in_scroll_mode(self):
+        html = render_trace(self.STEPS, source_code=self.SRC, height=640, scroll=True)
+        assert "height:640px" in html.replace(' ', '') or "height: 640px" in html or "640px" in html

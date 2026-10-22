@@ -12,11 +12,15 @@ Or with options:
     %%cpptutor --height 600
     int arr[5] = {1, 2, 3, 4, 5};
 
+    %%cpptutor --no-scroll   # window fits all content (no inner scrollbars)
+    int x = 1;
+
 Configure compiler flags for the entire notebook:
 
     %cpptutor_config --std c++20 --flags "-O2 -Wall"
 
     %cpptutor_config --std c++17   # just the standard
+    %cpptutor_config --no-scroll   # default to fit-all (no inner scroll)
     %cpptutor_config --reset       # back to defaults
     %cpptutor_config               # show current settings
 """
@@ -36,6 +40,7 @@ from .renderer import render_trace
 _DEFAULT_STD = "c++23"
 _DEFAULT_FLAGS: list[str] = []
 _DEFAULT_HEIGHT = 500
+_DEFAULT_SCROLL = True
 
 
 @magics_class
@@ -48,6 +53,7 @@ class CppTutorMagics(Magics):
         self._cpp_std = _DEFAULT_STD
         self._extra_flags: list[str] = list(_DEFAULT_FLAGS)
         self._height = _DEFAULT_HEIGHT
+        self._scroll = _DEFAULT_SCROLL
 
     # ── %cpptutor_config ──────────────────────────────────────────────
 
@@ -60,6 +66,7 @@ class CppTutorMagics(Magics):
             %cpptutor_config --std c++20
             %cpptutor_config --std c++17 --flags "-O2 -Wall -Wextra"
             %cpptutor_config --height 600
+            %cpptutor_config --no-scroll   # default to fit-all (no inner scroll)
             %cpptutor_config --reset
             %cpptutor_config            # show current settings
         """
@@ -70,6 +77,10 @@ class CppTutorMagics(Magics):
                             help='Extra compiler flags, quoted (e.g. "-O2 -Wall")')
         parser.add_argument("--height", type=int, default=None,
                             help="Default visualization height in pixels")
+        parser.add_argument("--no-scroll", dest="no_scroll", action="store_true",
+                            help="Default to fit-all: window grows to show all content, no inner scroll")
+        parser.add_argument("--scroll", dest="use_scroll", action="store_true",
+                            help="Default to fixed window with inner scroll (the default)")
         parser.add_argument("--reset", action="store_true",
                             help="Reset all settings to defaults")
         try:
@@ -81,6 +92,7 @@ class CppTutorMagics(Magics):
             self._cpp_std = _DEFAULT_STD
             self._extra_flags = list(_DEFAULT_FLAGS)
             self._height = _DEFAULT_HEIGHT
+            self._scroll = _DEFAULT_SCROLL
             display(HTML("<p>cpptutor config reset to defaults.</p>"))
             return
 
@@ -94,6 +106,12 @@ class CppTutorMagics(Magics):
         if args.height is not None:
             self._height = args.height
 
+        # --no-scroll / --scroll are both store_true; --no-scroll wins if both given.
+        if args.no_scroll:
+            self._scroll = False
+        elif args.use_scroll:
+            self._scroll = True
+
         # Show current settings
         flags_str = " ".join(self._extra_flags) if self._extra_flags else "(none)"
         display(HTML(
@@ -101,6 +119,7 @@ class CppTutorMagics(Magics):
             f"<tr><td><b>C++ standard</b></td><td>{self._cpp_std}</td></tr>"
             f"<tr><td><b>Extra flags</b></td><td>{html_mod.escape(flags_str)}</td></tr>"
             f"<tr><td><b>Default height</b></td><td>{self._height}px</td></tr>"
+            f"<tr><td><b>Scrolling</b></td><td>{'fixed window (inner scroll)' if self._scroll else 'fit-all (no inner scroll)'}</td></tr>"
             f"</table>"
         ))
 
@@ -121,6 +140,10 @@ class CppTutorMagics(Magics):
                             help="C++ standard for this cell only (overrides config)")
         parser.add_argument("--flags", default=None,
                             help='Extra compiler flags for this cell only')
+        parser.add_argument("--no-scroll", dest="no_scroll", action="store_true",
+                            help="Fit-all for this cell: window grows to show all content, no inner scroll")
+        parser.add_argument("--scroll", dest="use_scroll", action="store_true",
+                            help="Fixed window with inner scroll for this cell (overrides --no-scroll config)")
         parser.add_argument("--input", action="append", default=[], metavar="VALUE",
                             help="Pre-collected stdin input for cin/getline. "
                                  "Repeat --input for multiple lines: "
@@ -141,6 +164,13 @@ class CppTutorMagics(Magics):
         if args.flags is not None:
             extra_flags = shlex.split(args.flags)
         height = args.height if args.height is not None else self._height
+        # Scrolling: a cell flag wins; otherwise fall back to the notebook default.
+        if args.no_scroll:
+            scroll = False
+        elif args.use_scroll:
+            scroll = True
+        else:
+            scroll = self._scroll
 
         # Build compiler flags.  -std is always included so the user's
         # choice takes effect even with the auto-added #include headers.
@@ -157,7 +187,7 @@ class CppTutorMagics(Magics):
             return
 
         # Render the visualization
-        html_output = render_trace(steps, source_code, height=height)
+        html_output = render_trace(steps, source_code, height=height, scroll=scroll)
         display(HTML(html_output))
 
 

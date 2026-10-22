@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-09-30
+
+### Added
+- **Scrolling is now optional.** The visualization window has two modes, and a
+  navbar button ("⤢ Fit all" / "⇅ Scroll") toggles between them at any time:
+  - **Scroll** (default): the previous behavior — a fixed-height window where
+    the code / frames / heap columns scroll internally.
+  - **Fit all** (no scroll): the window grows to be tall enough to show ALL
+    content at once — no inner scrollbars; the embedding Jupyter cell stretches
+    to match.
+- New `--no-scroll` / `--scroll` options on the `%%cpptutor` cell magic (per
+  cell) and on `%cpptutor_config` (notebook default). A cell flag overrides the
+  notebook default, which defaults to "scroll". The `%cpptutor_config` summary
+  now reports the current scrolling mode.
+
 ## [0.3.1] - 2026-09-27
 
 ### Fixed

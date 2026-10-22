@@ -27,10 +27,22 @@ import json
 __all__ = ["render_trace"]
 
 
-def _generate_inner_html(steps: list[dict], source_code: str, height: int = 500) -> str:
-    """Generate the full HTML page that goes inside the iframe srcdoc."""
+def _generate_inner_html(steps: list[dict], source_code: str, height: int = 500,
+                         scroll: bool = True) -> str:
+    """Generate the full HTML page that goes inside the iframe srcdoc.
+
+    ``scroll`` controls the initial scrolling mode:
+      - True (default): fixed-height window, the three columns scroll internally.
+      - False: the window grows to fit ALL content (no internal scrollbars); the
+        parent page's auto-resize watcher stretches the iframe to match.
+    The mode can also be toggled at runtime via the "⤢ Fit all / ⇅ Scroll"
+    button in the navbar.
+    """
     if not steps:
         return '<!DOCTYPE html><html><body><p style="color:red;">No trace steps to display.</p></body></html>'
+
+    initial_scroll_js = "true" if scroll else "false"
+    widget_cls = "jpt-widget" if scroll else "jpt-widget no-scroll"
 
     # Determine source lines
     if source_code:
@@ -86,6 +98,23 @@ body {{
   border-radius: 6px;
   overflow: hidden;
 }}
+/* No-scroll ("fit all") mode: the widget grows to fit its full content and the
+   three columns stop scrolling internally. The parent auto-resize watcher then
+   stretches the iframe to the new height. Placed after the base rules so it
+   wins the cascade. */
+.jpt-widget.no-scroll {{
+  height: auto !important;
+  min-height: 120px;
+}}
+.jpt-widget.no-scroll .jpt-content {{
+  overflow: visible;
+  min-height: 0;
+}}
+.jpt-widget.no-scroll .jpt-code-section,
+.jpt-widget.no-scroll .jpt-frames-section,
+.jpt-widget.no-scroll .jpt-heap-section {{
+  overflow: visible;
+}}
 /* Nav bar */
 .jpt-navbar {{
   display: flex;
@@ -107,6 +136,13 @@ body {{
 }}
 .jpt-navbar button:hover {{ background: #f0f0f0; }}
 .jpt-navbar button:disabled {{ opacity: 0.4; cursor: default; }}
+.jpt-mode-btn {{
+  margin-left: auto;
+  font-weight: 600;
+  background: #fff;
+}}
+.jpt-mode-btn.active {{ background: #3b82f6; color: #fff; border-color: #2563eb; }}
+.jpt-mode-btn.active:hover {{ background: #2563eb; }}
 .jpt-slider {{
   flex: 1;
   accent-color: #3b82f6;
@@ -395,7 +431,7 @@ body {{
 </style>
 </head>
 <body>
-<div class="jpt-widget" style="height:{height}px;position:relative;">
+<div class="{widget_cls}" style="height:{height}px;position:relative;">
   <div class="jpt-navbar">
     <button id="btn-first" title="First">⏮</button>
     <button id="btn-prev" title="Previous">◀</button>
@@ -403,6 +439,7 @@ body {{
     <button id="btn-next" title="Next">▶</button>
     <button id="btn-last" title="Last">⏭</button>
     <span class="jpt-step-label" id="step-label">Step 1 of {n_steps}</span>
+    <button id="btn-scroll-mode" class="jpt-mode-btn" title="Toggle scrolling: off = window fits all content (no inner scroll); on = fixed window with inner scroll">⇅ Scroll</button>
   </div>
   <div class="jpt-output-label">Program output (stdout)</div>
   <div class="jpt-output" id="output"></div>
@@ -446,6 +483,32 @@ btnFirst.onclick = function() {{ gotoStep(0); }};
 btnPrev.onclick = function() {{ gotoStep(currentStep - 1); }};
 btnNext.onclick = function() {{ gotoStep(currentStep + 1); }};
 btnLast.onclick = function() {{ gotoStep(steps.length - 1); }};
+
+// ── Scroll mode (fixed window + inner scroll  ⇄  fit-all, no inner scroll) ──
+// scrollMode true  = fixed-height window, columns scroll internally.
+// scrollMode false = window grows to fit ALL content (no inner scrollbars);
+// the parent page's auto-resize watcher stretches the iframe to match.
+var scrollMode = {initial_scroll_js};
+var scrollBtn = document.getElementById('btn-scroll-mode');
+var jptWidget = document.querySelector('.jpt-widget');
+function applyScrollMode() {{
+  jptWidget.classList.toggle('no-scroll', !scrollMode);
+  if (scrollMode) {{
+    scrollBtn.textContent = '⇅ Scroll';
+    scrollBtn.classList.remove('active');
+    scrollBtn.title = 'Scrolling ON: fixed window, columns scroll internally. Click to fit all content (no inner scroll).';
+  }} else {{
+    scrollBtn.textContent = '⤢ Fit all';
+    scrollBtn.classList.add('active');
+    scrollBtn.title = 'Scrolling OFF: window fits all content. Click to return to fixed window with inner scroll.';
+  }}
+  // Re-lay arrows once the box has settled at its new size.
+  requestAnimationFrame(function() {{ requestAnimationFrame(drawArrows); }});
+}}
+scrollBtn.onclick = function() {{
+  scrollMode = !scrollMode;
+  applyScrollMode();
+}};
 
 // ── Rendering ──
 function escapeHtml(s) {{
@@ -872,20 +935,28 @@ toggleCollapse(document.getElementById('divider2'), 'frames-section');
 // Parent page polls iframe height via setInterval (see render_trace below)
 
 // ── Initialize ──
+applyScrollMode();   // sync the toggle button label/active state with initial mode
 gotoStep(0);
 </script>
 </body>
 </html>"""
 
 
-def render_trace(steps: list[dict], source_code: str | None = None, height: int = 500) -> str:
+def render_trace(steps: list[dict], source_code: str | None = None, height: int = 500,
+                 scroll: bool = True) -> str:
     """Render a trace as an HTML string with an iframe srcdoc.
+
+    ``height`` sets the fixed window height in *scrolling* mode. ``scroll``
+    sets the initial scrolling mode: ``True`` (default) = fixed window with
+    inner column scrollbars; ``False`` = the window grows to fit all content
+    (no inner scrollbars). Students can flip it at any time with the
+    "⤢ Fit all / ⇅ Scroll" button in the navbar.
 
     Returns HTML that can be displayed via ``IPython.display.HTML``.
     Works in trusted JupyterLab 4 / Notebook 7 notebooks.
     """
     src = source_code or ""
-    inner = _generate_inner_html(steps, src, height)
+    inner = _generate_inner_html(steps, src, height, scroll=scroll)
     # Escape for srcdoc attribute
     escaped = inner.replace("&", "&amp;").replace('"', "&quot;")
     # Parent polling script to auto-resize iframe height
